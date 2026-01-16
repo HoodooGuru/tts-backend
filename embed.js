@@ -191,23 +191,27 @@
         // 1. Process Content (Wrap words & Indexing)
         function processContent() {
             // A. Wrap text in Spans (Visual Only)
-            // Target all potential text containers
-            const elements = contentContainer.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, th, td, blockquote');
+            // Target all potential text containers including DIVs this time
+            const elements = contentContainer.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, th, td, blockquote, div');
 
             elements.forEach(el => {
                 if (el.classList.contains('tts-processed') || !el.textContent.trim()) return;
-                // Skip if it contains other block elements (simple heuristic)
-                if (el.querySelector('p, table, div, ul, ol')) return;
+
+                // Crucial: Only process "Leaf-like" blocks. 
+                // If it contains other block-level elements, skip it (let recursion find them).
+                if (el.querySelector('p, table, div, ul, ol, h1, h2, h3, h4, h5, h6, li')) return;
 
                 const text = el.textContent;
+                // Split by whitespace
                 const words = text.split(/(\s+)/);
                 el.innerHTML = '';
                 el.classList.add('tts-processed');
 
                 words.forEach(word => {
-                    if (word.trim().length > 0) {
+                    const trimmed = word.trim();
+                    if (trimmed.length > 0) {
                         const span = document.createElement('span');
-                        span.textContent = word;
+                        span.textContent = word; // visual keeps full text
                         span.className = 'tts-word';
                         el.appendChild(span);
                     } else {
@@ -220,23 +224,31 @@
             globalText = "";
             charIndexMap = [];
 
-            // Helper to append a single span's text to global state
             function appendSpan(span) {
                 const word = span.textContent;
+
+                // SIMPLE SANITIZATION:
+                // Remove emojis/symbols from the AUDIO text to match standard TTS behavior.
+                // We keep them in the visual span, but don't map offsets for them.
+                // Regex: Keep Letters, Numbers, Punctuation, Whitespace.
+                const speakableWord = word.replace(/[^\p{L}\p{N}\p{P}\s]/gu, '');
+
+                if (!speakableWord.trim()) return; // Nothing to speak here
+
                 const startIndex = globalText.length;
-                globalText += word;
-                const endIndex = startIndex + word.length;
+                globalText += speakableWord;
+                const endIndex = startIndex + speakableWord.length;
 
                 for (let i = startIndex; i < endIndex; i++) {
-                    charIndexMap[i] = span; // Map char to visual element
+                    charIndexMap[i] = span;
                 }
             }
-            // Helper to append punctuation/pause (no visual mapping)
+
             function appendPause(str = " ") {
                 const startIndex = globalText.length;
                 globalText += str;
                 for (let i = startIndex; i < globalText.length; i++) {
-                    charIndexMap[i] = null; // No visual element for pauses
+                    charIndexMap[i] = null;
                 }
             }
 
@@ -245,70 +257,60 @@
                 if (node.nodeType === Node.ELEMENT_NODE) {
                     const tag = node.tagName;
 
-                    // 1. Tables: Custom Column-wise Traversal
+                    // Skip hidden elements or scripts
+                    if (tag === 'SCRIPT' || tag === 'STYLE' || node.style.display === 'none') return;
+
+                    // 1. Tables: Column-wise
                     if (tag === 'TABLE') {
-                        // Assume simple grid table
                         const rows = Array.from(node.querySelectorAll('tr'));
                         if (rows.length === 0) return;
-
-                        // Find max columns
                         let maxCols = 0;
                         rows.forEach(r => maxCols = Math.max(maxCols, r.cells.length));
 
                         for (let c = 0; c < maxCols; c++) {
                             rows.forEach(r => {
                                 if (r.cells[c]) {
-                                    // Process the cell's content
-                                    // We can't recurse easily because we want specific order.
-                                    // simpler: find all .tts-word inside this cell
                                     const cellSpans = r.cells[c].querySelectorAll('.tts-word');
-                                    cellSpans.forEach(s => {
-                                        appendSpan(s);
-                                        appendPause(" "); // Space between words
-                                    });
-                                    appendPause(". "); // Pause after each cell? optional.
+                                    cellSpans.forEach(s => { appendSpan(s); appendPause(" "); });
+                                    appendPause(". ");
                                 }
                             });
-                            // Pause after each column
                             appendPause(" . . . ");
                         }
-                        return; // Done with table, don't traverse children normally
+                        return; // Done
                     }
 
-                    // 2. Headings: Pause after
+                    // 2. Headings
                     if (['H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(tag)) {
-                        // Process children normally (find spans)
-                        // We can't just use querySelectorAll because we need to respect potential nested structures? 
-                        // Actually headings are usually flat.
                         const spans = node.querySelectorAll('.tts-word');
                         spans.forEach(s => { appendSpan(s); appendPause(" "); });
-                        appendPause(" . . . "); // Pause after heading
+                        appendPause(" . . . ");
                         return;
                     }
 
-                    // 3. List Items: Pause after
+                    // 3. List Items
                     if (tag === 'LI') {
                         const spans = node.querySelectorAll('.tts-word');
                         spans.forEach(s => { appendSpan(s); appendPause(" "); });
-                        appendPause(" . "); // Short pause
+                        appendPause(" . ");
                         return;
                     }
 
-                    // 4. General Paragraphs etc.
-                    // If it's a leaf text container
+                    // 4. Generic Text Blocks (P, DIV, etc.)
+                    // Check if this specific node was processed as a text container
                     if (node.classList.contains('tts-processed')) {
                         const spans = node.querySelectorAll('.tts-word');
                         spans.forEach(s => { appendSpan(s); appendPause(" "); });
-                        if (tag === 'P') appendPause(" "); // Paragraph break
+                        // Add pause after block-level text containers
+                        if (['P', 'DIV', 'BLOCKQUOTE'].includes(tag)) appendPause(" . ");
                         return;
                     }
 
-                    // Continue recursion for containers (divs, sections, etc)
+                    // Continue recursion
                     Array.from(node.children).forEach(child => traverse(child));
                 }
             }
 
-            // Start traversal from the root container
             traverse(contentContainer);
         }
 
@@ -373,7 +375,7 @@
 
                 const data = await response.json();
                 const audioUrl = `${config.apiUrl}${data.audio_url}`;
-                currentAlignment = data.alignment;
+                currentAlignment = data.alignment; // List of {start, end, text_offset...}
 
                 currentAudio.src = audioUrl;
                 currentAudio.playbackRate = 1.0;
@@ -383,17 +385,21 @@
                     startSyncLoop();
                 };
 
-                currentAudio.onended = () => {
-                    resetUI();
-                    stopSyncLoop();
-                    clearHighlights();
+                // Add error handler
+                currentAudio.onerror = (e) => {
+                    console.error("Audio Playback Error", e);
+                    statusText.textContent = "Error";
+                    toggleButtons(false);
                 };
 
-                await currentAudio.play();
-                isPaused = false;
+                currentAudio.onended = () => {
+                    stopSpeaking();
+                };
 
-            } catch (e) {
-                console.error(e);
+                currentAudio.play();
+
+            } catch (err) {
+                console.error(err);
                 statusText.textContent = "Error";
                 toggleButtons(false);
             }
@@ -403,9 +409,14 @@
             currentAudio.pause();
             currentAudio.currentTime = 0;
             isPaused = false;
-            resetUI();
-            stopSyncLoop();
-            clearHighlights();
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+
+            // Clear highlights
+            const active = contentContainer.querySelectorAll('.tts-active');
+            active.forEach(el => el.classList.remove('tts-active'));
+
+            toggleButtons(false);
+            statusText.textContent = "Ready";
         }
 
         function pauseSpeaking() {
@@ -414,56 +425,47 @@
                 isPaused = true;
                 toggleButtons(false);
                 statusText.textContent = "Paused";
-                stopSyncLoop();
+                if (animationFrameId) cancelAnimationFrame(animationFrameId); // Stop sync loop on pause
             }
         }
 
-        // 4. Sync & Highlight
+        // 4. Synchronization Loop (The "Engine")
         function startSyncLoop() {
-            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            // Bias reset to near-zero as text lengths now match.
+            const LATENCY_BIAS = 0.05;
+
             function loop() {
-                const currentTime = currentAudio.currentTime;
-                const activeItem = currentAlignment.find(item =>
-                    currentTime >= item.start && currentTime < item.end
-                );
+                if (currentAudio.paused || !currentAlignment) return;
 
-                if (activeItem) {
-                    highlightWordAt(activeItem.text_offset);
+                const t = currentAudio.currentTime + LATENCY_BIAS;
+
+                // Find matching word
+                const match = currentAlignment.find(a => t >= a.start && t < a.end);
+
+                // Clear previous (only if changing or if invalid)
+                const active = contentContainer.querySelector('.tts-active');
+                if (active && (!match || charIndexMap[match.text_offset] !== active)) {
+                    active.classList.remove('tts-active');
                 }
 
-                if (!currentAudio.paused) {
-                    animationFrameId = requestAnimationFrame(loop);
+                if (match) {
+                    const span = charIndexMap[match.text_offset];
+                    if (span) {
+                        span.classList.add('tts-active');
+
+                        // Auto-scroll logic
+                        const rect = span.getBoundingClientRect();
+                        const safeZoneTop = window.innerHeight * 0.3;
+                        const safeZoneBottom = window.innerHeight * 0.7;
+
+                        if (rect.top < safeZoneTop || rect.bottom > safeZoneBottom) {
+                            span.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                    }
                 }
+                animationFrameId = requestAnimationFrame(loop);
             }
-            loop();
-        }
-
-        function stopSyncLoop() {
-            if (animationFrameId) cancelAnimationFrame(animationFrameId);
-        }
-
-        let currentHighlightedSpan = null;
-        function highlightWordAt(charIndex) {
-            const span = charIndexMap[charIndex];
-            if (span && span !== currentHighlightedSpan) {
-                if (currentHighlightedSpan) {
-                    currentHighlightedSpan.classList.remove('tts-active');
-                }
-                span.classList.add('tts-active');
-                currentHighlightedSpan = span;
-
-                // Robust Scroll Logic
-                // Only scroll if the element is getting close to the edge of the viewport
-                const rect = span.getBoundingClientRect();
-                const safeZoneTop = window.innerHeight * 0.3; // Top 30%
-                const safeZoneBottom = window.innerHeight * 0.7; // Bottom 70%
-
-                // If element is outside the middle 40% of screen, scroll it to center
-                // We use 'behavior: smooth' but only trigger when needed to avoid constant jank
-                if (rect.top < safeZoneTop || rect.bottom > safeZoneBottom) {
-                    span.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-            }
+            animationFrameId = requestAnimationFrame(loop);
         }
 
         function clearHighlights() {

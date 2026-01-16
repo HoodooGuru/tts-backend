@@ -45,13 +45,31 @@ async def generate_tts(request: TTSRequest):
 
         # Convert rate if necessary. Edge TTS uses "+0%" string format usually, 
         # but let's just stick to default speed or simple +/- percentages if user asks.
-        # For this demo, let's map float 0.5-2.0 to string percentage.
-        # 1.0 = +0%, 1.5 = +50%, 0.8 = -20%
         # rate_percent = int((request.rate - 1.0) * 100)
         # rate_str = f"{rate_percent:+d}%"
 
+        # --- LINGUISTIC PROCESSING ---
+        final_text = request.text
+        
+        # --- LINGUISTIC PROCESSING ---
+        final_text = request.text
+        
+        # DISABLE temporarily: Text replacement changes character offsets/length, 
+        # causing highlight drift (Visual jumps ahead of Audio).
+        # To fix this, we need smart offset re-mapping or SSML.
+        # rules_file = "pronunciation.json"
+        # if os.path.exists(rules_file):
+        #     try:
+        #         import json
+        #         with open(rules_file, "r") as rf:
+        #             rules = json.load(rf)
+        #             # for word, replacement in rules.items():
+        #             #    final_text = final_text.replace(word, replacement)
+        #     except Exception as e:
+        #         print(f"Error loading rules: {e}")
+
         # communicate = edge_tts.Communicate(request.text, request.voice, rate=rate_str)
-        communicate = edge_tts.Communicate(request.text, request.voice) # Try without rate first
+        communicate = edge_tts.Communicate(final_text, request.voice) # final_text is now == request.text
         
         # We need to capture audio and boundary events
         audio_data = bytearray()
