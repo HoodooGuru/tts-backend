@@ -162,6 +162,7 @@
 
     // --- Widget Logic ---
     function initLogic() {
+        console.log("%c TTS Widget v3.0 (Sync Fix Applied) ", "background: #222; color: #bada55");
         const contentContainer = document.querySelector(config.selector);
         if (!contentContainer) {
             console.error('TTSWidget: Content selector not found:', config.selector);
@@ -227,17 +228,13 @@
             function appendSpan(span) {
                 const word = span.textContent;
 
-                // SIMPLE SANITIZATION:
-                // Remove emojis/symbols from the AUDIO text to match standard TTS behavior.
-                // We keep them in the visual span, but don't map offsets for them.
-                // Regex: Keep Letters, Numbers, Punctuation, Whitespace.
-                const speakableWord = word.replace(/[^\p{L}\p{N}\p{P}\s]/gu, '');
-
-                if (!speakableWord.trim()) return; // Nothing to speak here
+                // FIXED: Do not strip emojis.
+                // Edge TTS (Backend) counts these characters indices even if it doesn't speak them.
+                // Stripping them here causes the local index to fall behind (appearing as highlight jumping ahead).
 
                 const startIndex = globalText.length;
-                globalText += speakableWord;
-                const endIndex = startIndex + speakableWord.length;
+                globalText += word;
+                const endIndex = startIndex + word.length;
 
                 for (let i = startIndex; i < endIndex; i++) {
                     charIndexMap[i] = span;

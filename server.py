@@ -52,24 +52,14 @@ async def generate_tts(request: TTSRequest):
         final_text = request.text
         
         # --- LINGUISTIC PROCESSING ---
-        final_text = request.text
+        # Normalize to ASCII to match Frontend's length calculation (JS vs Py Emoji mismatch fix)
+        import re
+        final_text = re.sub(r'[^\x00-\x7F]+', '', request.text)
         
-        # DISABLE temporarily: Text replacement changes character offsets/length, 
-        # causing highlight drift (Visual jumps ahead of Audio).
-        # To fix this, we need smart offset re-mapping or SSML.
         # rules_file = "pronunciation.json"
-        # if os.path.exists(rules_file):
-        #     try:
-        #         import json
-        #         with open(rules_file, "r") as rf:
-        #             rules = json.load(rf)
-        #             # for word, replacement in rules.items():
-        #             #    final_text = final_text.replace(word, replacement)
-        #     except Exception as e:
-        #         print(f"Error loading rules: {e}")
+        # ... (disabled)
 
-        # communicate = edge_tts.Communicate(request.text, request.voice, rate=rate_str)
-        communicate = edge_tts.Communicate(final_text, request.voice) # final_text is now == request.text
+        communicate = edge_tts.Communicate(final_text, request.voice)
         
         # We need to capture audio and boundary events
         audio_data = bytearray()
