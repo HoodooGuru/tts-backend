@@ -18,78 +18,27 @@
     const styles = `
     :root {
         --primary-color: #2563eb;
-        --primary-hover: #1d4ed8;
-        --bg-color: #f8fafc;
-        --text-color: #0f172a;
-        --accent-color: #3b82f6;
-        --highlight-color: #fde047;
-        --highlight-current-word: #fbbf24;
-        --widget-bg: rgba(255, 255, 255, 0.85);
-        --widget-border: rgba(255, 255, 255, 0.5);
-        --shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+        --widget-bg: #2C4F5B; /* User requested colour */
+        --widget-text: #ffffff;
+        --highlight-current-word: #fde047;
     }
     
     /* Highlight Classes */
     .tts-word {
         transition: background-color 0.2s ease;
         border-radius: 3px;
-        padding: 0 0px;
         cursor: pointer;
     }
-    .tts-word:hover {
-        background-color: #e2e8f0;
-    }
+    .tts-word:hover { background-color: rgba(44, 79, 91, 0.1); }
     .tts-active {
         background-color: var(--highlight-current-word);
         color: #000;
-    }
-    .tts-sentence {
-        background-color: rgba(253, 224, 71, 0.3);
+        box-shadow: 0 0 0 2px var(--highlight-current-word);
     }
     
-    /* Settings Panel */
+    /* Settings Panel - Hidden for sleekness, but keeping styles just in case */
     .tts-settings-panel {
-        position: absolute;
-        bottom: 110%;
-        left: 50%;
-        transform: translateX(-50%);
-        width: 280px;
-        background: white;
-        padding: 15px;
-        border-radius: 12px;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
-        border: 1px solid #e2e8f0;
-        transition: opacity 0.2s, transform 0.2s;
-        z-index: 10000; /* High z-index for overlay */
-        font-family: 'Outfit', sans-serif;
-    }
-    .tts-settings-panel.hidden {
-        display: none;
-    }
-    .setting-group {
-        margin-bottom: 12px;
-    }
-    .setting-group:last-child {
-        margin-bottom: 0;
-    }
-    .setting-group label {
-        display: block;
-        font-size: 0.8rem;
-        font-weight: 600;
-        color: #64748b;
-        margin-bottom: 5px;
-    }
-    .tts-settings-panel select {
-        width: 100%;
-        padding: 8px;
-        border: 1px solid #cbd5e1;
-        border-radius: 6px;
-        font-family: inherit;
-        font-size: 0.9rem;
-        color: #334155;
-    }
-    .tts-settings-panel input[type="range"] {
-        width: 100%;
+        display: none; /* User requested hide */
     }
     
     /* Floating Widget */
@@ -101,69 +50,53 @@
         display: flex;
         align-items: center;
         gap: 15px;
-        padding: 12px 25px;
+        padding: 10px 20px;
+        
         background: var(--widget-bg);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        border: 1px solid var(--widget-border);
+        color: var(--widget-text);
+        
+        border: 1px solid rgba(255,255,255,0.1);
         border-radius: 50px;
-        box-shadow: var(--shadow);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
         z-index: 9999;
-        transition: all 0.3s ease;
         font-family: 'Outfit', sans-serif;
+        font-size: 15px;
     }
-    .tts-widget:hover {
-        box-shadow: 0 8px 40px rgba(0, 0, 0, 0.15);
-        transform: translateX(-50%) translateY(-2px);
-    }
+    
+    /* Buttons */
+    .tts-controls { display: flex; align-items: center; gap: 8px; }
+    
     .control-btn {
-        background: var(--primary-color);
+        background: rgba(255,255,255,0.15);
         color: white;
         border: none;
-        width: 45px;
-        height: 45px;
+        width: 36px;
+        height: 36px;
         border-radius: 50%;
         cursor: pointer;
-        font-size: 1.1rem;
+        font-size: 0.9rem;
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: background 0.2s;
+        transition: all 0.2s ease;
     }
     .control-btn:hover {
-        background: var(--primary-hover);
+        background: white;
+        color: var(--widget-bg);
+        transform: scale(1.05);
     }
-    .control-btn#btn-stop {
-        background: transparent;
-        color: #64748b;
-        border: 2px solid #cbd5e1;
-        width: 35px;
-        height: 35px;
-        font-size: 0.9rem;
-    }
-    .control-btn#btn-stop:hover {
-        background: #f1f5f9;
-        color: #ef4444;
-        border-color: #ef4444;
-    }
-    .hidden {
-        display: none;
-    }
+    
+    /* Status Text */
     .tts-status {
-        font-weight: 600;
-        font-size: 0.95rem;
-        color: #334155;
-        min-width: 120px;
+        font-weight: 500;
+        min-width: 140px;
         text-align: center;
+        letter-spacing: 0.5px;
+        white-space: nowrap;
     }
-    .tts-settings-toggle {
-        color: #94a3b8;
-        cursor: pointer;
-        transition: color 0.2s;
-    }
-    .tts-settings-toggle:hover {
-        color: #475569;
-    }
+    
+    /* Hide Settings Cog */
+    .tts-settings-toggle { display: none; }
     `;
 
     // --- HTML Injection ---
@@ -257,8 +190,8 @@
 
         // 1. Process Content (Wrap words)
         function processContent() {
-            // Only process paragraphs to avoid breaking layout structures
-            const paragraphs = contentContainer.querySelectorAll('p');
+            // Select all readable elements: paragraphs, headings, lists, tables
+            const paragraphs = contentContainer.querySelectorAll('p, h1, h2, h3, h4, li, td, th');
 
             paragraphs.forEach(p => {
                 const text = p.textContent;
