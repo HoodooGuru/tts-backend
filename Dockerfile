@@ -12,6 +12,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the current directory contents into the container at /app
 COPY server.py .
+COPY embed.js .
 # (Optional) Copy other necessary files like deployment.md or specialized scripts if needed
 # COPY . . 
 

@@ -23,6 +23,14 @@ app.add_middleware(
 AUDIO_DIR = "audio_cache"
 os.makedirs(AUDIO_DIR, exist_ok=True)
 
+# SERVE STATIC FILES (e.g. embed.js)
+# This allows users to load the script directly from the backend
+@app.get("/embed.js")
+async def get_widget_script():
+    if os.path.exists("embed.js"):
+        return FileResponse("embed.js", media_type="application/javascript")
+    raise HTTPException(status_code=404, detail="Script not found")
+
 class TTSRequest(BaseModel):
     text: str
     voice: str
