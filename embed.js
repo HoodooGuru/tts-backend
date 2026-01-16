@@ -225,16 +225,27 @@
             globalText = "";
             charIndexMap = [];
 
+            // HELPER: Normalize text to ASCII to ensure JS (UTF-16) and Python (Unicode) 
+            // character counts match perfectly. 
+            // This strips Emojis and special chars from the "Sync String" but keeps them visible.
+            function toAscii(str) {
+                return str.replace(/[^\x00-\x7F]/g, "");
+            }
+
             function appendSpan(span) {
                 const word = span.textContent;
 
-                // FIXED: Do not strip emojis.
-                // Edge TTS (Backend) counts these characters indices even if it doesn't speak them.
-                // Stripping them here causes the local index to fall behind (appearing as highlight jumping ahead).
+                // Normalization: Only map the ASCII characters.
+                // If word is "📱 Phone", visual is "📱 Phone".
+                // Sync Text becomes " Phone".
+                // Because Backend also strips "📱", the indices for "Phone" match perfectly.
+
+                const safeWord = toAscii(word);
+                if (!safeWord) return; // Skip if purely emoji/non-ascii
 
                 const startIndex = globalText.length;
-                globalText += word;
-                const endIndex = startIndex + word.length;
+                globalText += safeWord;
+                const endIndex = startIndex + safeWord.length;
 
                 for (let i = startIndex; i < endIndex; i++) {
                     charIndexMap[i] = span;
