@@ -188,43 +188,128 @@
         let animationFrameId = null;
         let isPaused = false;
 
-        // 1. Process Content (Wrap words)
+        // 1. Process Content (Wrap words & Indexing)
         function processContent() {
-            // Select all readable elements: paragraphs, headings, lists, tables
-            const paragraphs = contentContainer.querySelectorAll('p, h1, h2, h3, h4, li, td, th');
+            // A. Wrap text in Spans (Visual Only)
+            // Target all potential text containers
+            const elements = contentContainer.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, th, td, blockquote');
 
-            paragraphs.forEach(p => {
-                const text = p.textContent;
+            elements.forEach(el => {
+                if (el.classList.contains('tts-processed') || !el.textContent.trim()) return;
+                // Skip if it contains other block elements (simple heuristic)
+                if (el.querySelector('p, table, div, ul, ol')) return;
+
+                const text = el.textContent;
                 const words = text.split(/(\s+)/);
-                p.innerHTML = '';
+                el.innerHTML = '';
+                el.classList.add('tts-processed');
 
                 words.forEach(word => {
                     if (word.trim().length > 0) {
                         const span = document.createElement('span');
                         span.textContent = word;
                         span.className = 'tts-word';
-                        span.addEventListener('click', () => { /* seek? */ });
-                        p.appendChild(span);
+                        el.appendChild(span);
                     } else {
-                        p.appendChild(document.createTextNode(word));
+                        el.appendChild(document.createTextNode(word));
                     }
                 });
             });
 
-            // Flatten for indexing
-            const spans = contentContainer.querySelectorAll('.tts-word');
+            // B. Build Global Text & Index Map (Logical Order)
             globalText = "";
             charIndexMap = [];
 
-            spans.forEach(span => {
+            // Helper to append a single span's text to global state
+            function appendSpan(span) {
                 const word = span.textContent;
                 const startIndex = globalText.length;
-                globalText += word + " ";
-                for (let i = 0; i < word.length; i++) {
-                    charIndexMap[startIndex + i] = span;
+                globalText += word;
+                const endIndex = startIndex + word.length;
+
+                for (let i = startIndex; i < endIndex; i++) {
+                    charIndexMap[i] = span; // Map char to visual element
                 }
-                charIndexMap[startIndex + word.length] = null;
-            });
+            }
+            // Helper to append punctuation/pause (no visual mapping)
+            function appendPause(str = " ") {
+                const startIndex = globalText.length;
+                globalText += str;
+                for (let i = startIndex; i < globalText.length; i++) {
+                    charIndexMap[i] = null; // No visual element for pauses
+                }
+            }
+
+            // Recursive Traversal Helper
+            function traverse(node) {
+                if (node.nodeType === Node.ELEMENT_NODE) {
+                    const tag = node.tagName;
+
+                    // 1. Tables: Custom Column-wise Traversal
+                    if (tag === 'TABLE') {
+                        // Assume simple grid table
+                        const rows = Array.from(node.querySelectorAll('tr'));
+                        if (rows.length === 0) return;
+
+                        // Find max columns
+                        let maxCols = 0;
+                        rows.forEach(r => maxCols = Math.max(maxCols, r.cells.length));
+
+                        for (let c = 0; c < maxCols; c++) {
+                            rows.forEach(r => {
+                                if (r.cells[c]) {
+                                    // Process the cell's content
+                                    // We can't recurse easily because we want specific order.
+                                    // simpler: find all .tts-word inside this cell
+                                    const cellSpans = r.cells[c].querySelectorAll('.tts-word');
+                                    cellSpans.forEach(s => {
+                                        appendSpan(s);
+                                        appendPause(" "); // Space between words
+                                    });
+                                    appendPause(". "); // Pause after each cell? optional.
+                                }
+                            });
+                            // Pause after each column
+                            appendPause(" . . . ");
+                        }
+                        return; // Done with table, don't traverse children normally
+                    }
+
+                    // 2. Headings: Pause after
+                    if (['H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(tag)) {
+                        // Process children normally (find spans)
+                        // We can't just use querySelectorAll because we need to respect potential nested structures? 
+                        // Actually headings are usually flat.
+                        const spans = node.querySelectorAll('.tts-word');
+                        spans.forEach(s => { appendSpan(s); appendPause(" "); });
+                        appendPause(" . . . "); // Pause after heading
+                        return;
+                    }
+
+                    // 3. List Items: Pause after
+                    if (tag === 'LI') {
+                        const spans = node.querySelectorAll('.tts-word');
+                        spans.forEach(s => { appendSpan(s); appendPause(" "); });
+                        appendPause(" . "); // Short pause
+                        return;
+                    }
+
+                    // 4. General Paragraphs etc.
+                    // If it's a leaf text container
+                    if (node.classList.contains('tts-processed')) {
+                        const spans = node.querySelectorAll('.tts-word');
+                        spans.forEach(s => { appendSpan(s); appendPause(" "); });
+                        if (tag === 'P') appendPause(" "); // Paragraph break
+                        return;
+                    }
+
+                    // Continue recursion for containers (divs, sections, etc)
+                    Array.from(node.children).forEach(child => traverse(child));
+                }
+            }
+
+            // Start traversal from the root container
+            traverse(contentContainer);
         }
 
         processContent();
